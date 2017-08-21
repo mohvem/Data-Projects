@@ -200,7 +200,7 @@ ind_sf <- ggplot(data = sf2, aes(x = industry, fill = signed)) +
   geom_bar(stat = "count") +
   theme(axis.text.x = element_text(angle=-90))
 
-### saved this graph
+
 
 ## SoCal
 
@@ -219,17 +219,6 @@ ind_pacnw <- ggplot(data = pacnw, aes(x = industry, fill = signed)) +
   theme(axis.text.x = element_text(angle=-90)) 
 
 
-## southern florida
 
-
-### INSPECT MAJOR MARKETS IN THESE AREAS AND LOOK AT HOW WE ARE DOING THERE
-
-#-#-# SAN FRANCISCO BAY AREA
-
-sf <- gsi[gsi$company_office_city == "San Francisco" || gsi$company_office_city == "Oakland" || gsi$company_office_city == "MOUNTAIN VIEW" || gsi$company_office_city =="Palo Alto" || gsi$company_office_city == " Menlo Park" || 
-            gsi$company_office_city == "San Ramon" || gsi$company_office_city == "San Jose" || gsi$company_office_city == "San Mateo" || gsi$company_office_city == "San Bruno" || gsi$company_office_city == "Pleasanton", ]
-table(sf$Primary_Industry)
-
-table(sf$majority_sales_office) ## the sales are coming from SF brokers/salespeople primarily
 
 
