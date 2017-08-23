@@ -3,8 +3,10 @@ gsi <- read_csv("file 1")  #data set 1
 long_lat <- read_csv("file 2")  # put in file path of long/lat file
 require(dplyr)
 
+# count the number of cases in each city
 top_cities <- gsi %>% group_by(company_office_city) %>% summarise(., counts = n_distinct(case_name, na.rm = TRUE))
 
+# change col name so you can do a table merge with latitudes 
 colnames(top_cities) <- c("city", "count")
 
 top_cities2 <- left_join(top_cities, long_lat)
@@ -13,7 +15,7 @@ top_cities3 <- top_cities2 %>% group_by(city) %>% summarise(., long = mean(longi
 
 top_cities3 <- left_join(top_cities3, top_cities)
 
-### Clean Up in Excel
+### Cleaned Up in Excel
 
 top_cities3 <- read_csv("~/top_cities.csv")
 
@@ -28,9 +30,7 @@ require(ggplot2)
 require(ggmap)
 require(plotly)
 map("state")
-points(top50_cities$long, top50_cities$lat, col = "blue", pch = 16, cex = 1)
-
-## shows an opportunity for growth in the West even though we don't have as many brokers there
+points(top50_cities$long, top50_cities$lat, col = "blue", pch = 16, cex = 1) # plot cities on map
 
 
 ## more detailed map
@@ -60,8 +60,8 @@ brokers <- read_csv("file 3") # dataset 3
 brok <- brokers[, c(1,2, 15)]
 names(brok)[3] <- "city"
 
-brok2 <- brok %>% group_by(., city) %>% summarise(., Brokers = n_distinct(PCES_SORCE_PRODR_ID))
-brok3 <- left_join(brok2, long_lat)
+brok2 <- brok %>% group_by(., city) %>% summarise(., Brokers = n_distinct(PCES_SORCE_PRODR_ID)) #brokers in each city
+brok3 <- left_join(brok2, long_lat) #merge with lat/long dataset
 brok3 <- brok3 %>% group_by(., city) %>% summarise(long = mean(longitude), lat = mean(latitude))
 brok3$Brokers <- brok2$Brokers
 
@@ -186,39 +186,4 @@ brk <- brk + geom_point(data =f500_2[f500_2$signed == "No",], aes(x = long, y = 
 
 
 plotly(brk) #interactive HTML map
-
-### INSPECT MAJOR INDUSTRIES IN POTENTIAL TARGET MARKETS
-
-sort(table(f500$industry[f500$signed == "Yes"]), decreasing = TRUE)
-
-## SF BAY AREA
-ca <- f500[f500$state == "CA", ]
-sf <- ca[between(ca$long, -125, -120), ]
-
-sf2 <- sf[sf$industry %in% names(which(table(sf$industry) > 2)), ]
-ind_sf <- ggplot(data = sf2, aes(x = industry, fill = signed)) +
-  geom_bar(stat = "count") +
-  theme(axis.text.x = element_text(angle=-90))
-
-
-
-## SoCal
-
-socal <- ca[between(ca$long, -120, -115), ]
-socal2 <- socal[socal$industry %in% names(which(table(socal$industry) > 1)), ]
-ind_soc <- ggplot(data = socal2, aes(x = industry, fill = signed)) +
-  geom_bar(stat = "count") +
-  theme(axis.text.x = element_text(angle=-90)) 
-
-## seattle/portland
-
-pacnw <- f500[f500$state == "WA" | f500$state == "OR", ]
-pacnw2 <- pacnw[pacnw$industry %in% names(which(table(pacnw$industry) > 1)), ]
-ind_pacnw <- ggplot(data = pacnw, aes(x = industry, fill = signed)) +
-  geom_bar(stat = "count") +
-  theme(axis.text.x = element_text(angle=-90)) 
-
-
-
-
 
