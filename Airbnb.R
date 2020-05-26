@@ -1,22 +1,23 @@
 # Load and Clean Airbnb Data set
 require(readr)
-list <- read_csv("/Users/mohini_vem/Downloads/listings.csv")
-cal <- read_csv("/Users/mohini_vem/Downloads/calendar.csv")
-rev <- read_csv("/Users/mohini_vem/Downloads/reviews.csv")
+require(lubridate)
+require(stringi)
+require(stringr)
+### Download listings, calendar, and reviews data from Airbnb
+list <- read_csv("listings.csv")
+cal <- read_csv("calendar.csv")
+rev <- read_csv("reviews.csv")
 
 sum(complete.cases(list)) # all are NA lol so let's just leave as is
 sum(complete.cases(cal))  # about half is NA
 cal2 <- cal[complete.cases(cal), ] # take out NA rows
 sum(complete.cases(rev))  # no NAs
 
-require(lubridate)
 cal2$date  <- as.Date(cal2$date, format = "%m-%d-%Y")
 cal2$month <- month(cal2$date)
 cal2$year <- year(cal2$date)
 
 ### Convert things to numbers and remove the weird characters
-require(stringi)
-require(stringr)
 list$price <- stri_replace_all_regex(str = list$price, pattern = "[$]", replacement = "")
 list$price <- stri_replace_all_regex(str = list$price, pattern = ",", replacement = "")
 list$price <- stri_replace_all_regex(str = list$price, pattern = "\\.00", replacement = "")
