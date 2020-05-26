@@ -1,5 +1,7 @@
 library(alr3)
 library(MASS)
+### WSJ EDUCATION LOAN DEFAULT RATES
+### raw data from https://graphics.wsj.com/table/DEFAULTS
 wsj<-read.csv("[[WSJ DATA]]")
 
 fit<- lm(DEFAULT_RATE ~ NETPRICE + INSTITUTION_GROUP , data = wsj)
