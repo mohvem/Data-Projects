@@ -1,8 +1,8 @@
 # xgboost predictive model on time it takes for emergency vehicle to show up at scene of incident based on training dataset from LA Fire Department
 ### load datasets from the place you downloaded them from
 
-load("/Users/cliccuser/Downloads/dummy_lafd.rdata")
-load("/Users/cliccuser/Downloads/test_dummy.rdata")
+load("[[PATH]]/dummy_lafd.rdata")
+load("[[PATH]]/Downloads/test_dummy.rdata")
 
 ### clean the dataset
 
@@ -249,7 +249,7 @@ preds5 <- predict(xgb11, as.matrix(test_dummy))
 summary(preds5)
 
 xgb_number_whatever_and_a_half2 <- data.frame(row.id = row.names$row.id, prediction = preds5)
-write.csv(xgb_number_whatever_and_a_half2, file = "/Volumes/SAVE2HERE/xgb_number_whatever_and_a_half3.csv")
+write.csv(xgb_number_whatever_and_a_half2, file = "Model.csv")
 
 
 
