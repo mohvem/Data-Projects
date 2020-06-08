@@ -1,6 +1,6 @@
 ### Set up the Data
 
-stocks <- read.csv("/Users/mohini_vem/Downloads/stocks.csv")   ### read in the file
+stocks <- read.csv("[[PATH]]/stocks.csv")   ### read in the file
 stocks_training <- stocks[1:61,] #rows up until Jan 2015    #### years to train
 stocks_testing<- stocks[61:nrow(stocks), ] #the rest   #### years to test
 
