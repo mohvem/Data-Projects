@@ -44,7 +44,7 @@ plot(lafd3$unit_groups, lafd3$transformed)
 # Grouping First.in.District ----------------------------------------------
 ### condensing the district variable into 4 levels
 
-fdgroups <- read.csv("/Users/mvembusubramanian/Downloads/LAFD_First_In_Districts.csv", header = TRUE)
+fdgroups <- read.csv("[[PATH]]/LAFD_First_In_Districts.csv", header = TRUE)
 names(fdgroups)[4] <- "First.in.District"
 fdgroups$First.in.District <- as.integer(fdgroups$First.in.District)
 lafd3$First.in.District <- as.integer(lafd3$First.in.District)
