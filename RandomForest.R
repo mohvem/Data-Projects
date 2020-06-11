@@ -121,49 +121,4 @@ mean(( yhat.boost -boston.test)^2)
 
 
 
-### Based on LA Fire Dept data to predict elapsed times
 
-# Random Forest on Mo’s Dataset +n_distinct column ------------------------
-
-load("/Users/mvembusubramanian/Downloads/p.Rdata")
-require(dplyr)
-lafd_train <- left_join(lafd_train, p)
-lafd_test <-left_join(lafd_test,p)
-set.seed(123)
-subset <- sample(1:nrow(lafd_train), 150000)
-lafd_train2 <- lafd_train[subset, ]   #make dataset smaller so R doesn't get upset
-lafd_train2 <- lafd_train2[complete.cases(lafd_train2), ] # not sure if these needs to happen
-names(lafd_train2)[38] <- "distinct_row_ids"
-names(lafd_test)[38] <- "distinct_row_ids"
-
-
-### Initial Models -------------------------------
-rf <- randomForest(transformed ~., data = lafd_train2[, c(3,6:38)], mtry = 5, ntree = 100, importance = TRUE)
-
-plot(rf)
-varImpPlot(rf)
-importance(rf)
-
-### Make Some Predictions
-
-RF_pred1 <- predict(rf, newdata = lafd_test[, c(3,6:38)])
-mean((exp(RF_pred1) - exp(lafd_test$transformed))^2, na.rm = TRUE)  ### 1.543196 million
-
-### Improve Random forest ------------------------
-
-rf2 <- randomForest(transformed ~., data = lafd_train2[, c(3,6:38)], mtry = 7, ntree = 50, importance = TRUE)
-RF_pred2 <- predict(rf2, newdata = lafd_test[, c(3,6:38)])
-mean((exp(RF_pred2) - exp(lafd_test$transformed))^2, na.rm = TRUE) ### 1.515 million
-
-impute <- function(x){
-  if(is.na(x)){
-    val <- exp(6.016886)
-  } else {
-    val <- x
-  }
-  return(val)
-}
-
-y_hat <- sapply(pred$prediction, impute)
-pred$prediction <- y_hat
-write.csv(pred, file = "/Users/mvembusubramanian/Documents/Stats 101C/Stats 101C Final/RFpredicts.csv")
