@@ -6,7 +6,7 @@ library(janitor)
 
 rm(list = ls())
 options(scipen = 999)
-stocks <- read.csv("/Users/mohinivembu/Documents/Stats C183/stockData 2020.csv")   ### read in the file
+stocks <- read.csv("[[PATH]]/stockData 2020.csv")   ### read in the file
 stocks_long <- stocks  %>% 
   gather(stock,price,-c(X, Date)) %>% 
   clean_names() %>% 
