@@ -1,5 +1,5 @@
 # read in the file, normalize values
-default <- read.csv("/Volumes/SAVE2HERE/Default.csv")
+default <- read.csv("Default.csv")
 normalize<-function(x) {return((x-min(x))/(max(x)-min(x)))}
 default2 <- cbind(as.data.frame(lapply(default[,4:5], normalize)), default[, 2:3])
 
