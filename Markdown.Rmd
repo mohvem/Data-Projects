@@ -1,0 +1,366 @@
+---
+title: "Integrity Lab Analysis"
+author: "Mohini Vembusubramanian"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, echo=FALSE,message =FALSE, warning = F}
+library(tidyverse)
+library(lubridate)
+library(caret)
+library(e1071)
+library(networkD3)
+library(ggplot2)
+library(plotly)
+library(stringr)
+library(janitor)
+library(purrr)
+library(readxl)
+library(readr)
+library(kableExtra)
+library(flextable)
+library(broom)
+library(randomForest)
+### Read in Datasets
+weather_files <- list.files("Inputs/Weather")[-str_detect(string = list.files("Inputs/Weather"),pattern = "\\.zip")]
+crime_files <- list.files("Inputs/Crime")[-str_detect(string = list.files("Inputs/Crime"),pattern = "\\.zip")]
+crimes <- map(.x = paste0("Inputs/Crime/",crime_files),.f = ~read_csv(.x) %>% 
+                 mutate(src = .x,
+    type= str_replace_all(string = src,pattern = "Inputs/Crime/|\\.csv",replacement = "")) %>% 
+      select(-src)) %>% 
+  bind_rows() %>% 
+  clean_names()
+weather <- map(.x = paste0("Inputs/Weather/",weather_files),.f = ~read_csv(.x) %>% 
+                 mutate(src = .x,
+    type= str_replace_all(string = src,pattern = "Inputs/Weather/|\\.csv",replacement = "")) %>% 
+      select(-src) %>% 
+      clean_names()) 
+city_attributes <- weather[[1]]
+weather_df <- weather[-c(1,5)] %>% 
+  bind_rows()
+weather_desc <- weather[[5]]
+```
+
+```{r,echo = F, message = F}
+crimes_clean <- crimes %>% 
+  filter(!is.na(id)) %>% 
+  mutate(day = day(as.POSIXlt(date, format="%m/%d/%Y %I:%M:%S %p")),
+         mon =month(as.POSIXlt(date, format="%m/%d/%Y %I:%M:%S %p")),
+         yr = year(as.POSIXlt(date, format="%m/%d/%Y %I:%M:%S %p")),
+         day_of_wk = wday(as.POSIXlt(date, format="%m/%d/%Y %I:%M:%S %p"), label = TRUE),
+          hr_of_day = hour(as.POSIXlt(date, format="%m/%d/%Y %I:%M:%S %p"))) %>% 
+  mutate(date = make_date(year = yr,month = mon,day = day)) %>% 
+  select(-yr) %>% 
+  distinct() %>% 
+  arrange(id,desc(latitude), desc(longitude)) %>% 
+  distinct(id, .keep_all = T)
+
+weather_clean <- weather_df %>% 
+  filter(!is.na(chicago)) %>% 
+  mutate(day = day(as.POSIXlt(datetime, format="%m/%d/%Y %I:%M:%S %p")),
+         mon =month(as.POSIXlt(datetime, format="%m/%d/%Y %I:%M:%S %p")),
+         mon_label =month(as.POSIXlt(datetime, format="%m/%d/%Y %I:%M:%S %p"), label = T),
+         yr = year(as.POSIXlt(datetime, format="%m/%d/%Y %I:%M:%S %p")),
+         day_of_wk = wday(as.POSIXlt(datetime, format="%m/%d/%Y %I:%M:%S %p"), label = TRUE),
+          hr_of_day = hour(as.POSIXlt(datetime, format="%m/%d/%Y %I:%M:%S %p"))) %>% 
+  mutate(date = make_date(year = yr,month = mon,day = day)) 
+
+chicago_clean_day <- weather_clean %>% 
+  group_by(date, yr, mon, mon_label, day,type) %>% 
+  summarise(chicago = mean(chicago)) %>% 
+  spread(key = type,value = chicago) 
+
+chic_desc <- weather_desc %>% 
+  filter(!is.na(chicago)) %>% 
+  mutate(day = day(as.POSIXlt(datetime, format="%m/%d/%Y %I:%M:%S %p")),
+         mon =month(as.POSIXlt(datetime, format="%m/%d/%Y %I:%M:%S %p")),
+         mon_label =month(as.POSIXlt(datetime, format="%m/%d/%Y %I:%M:%S %p"), label = T),
+         yr = year(as.POSIXlt(datetime, format="%m/%d/%Y %I:%M:%S %p")),
+         day_of_wk = wday(as.POSIXlt(datetime, format="%m/%d/%Y %I:%M:%S %p"), label = TRUE),
+          hr_of_day = hour(as.POSIXlt(datetime, format="%m/%d/%Y %I:%M:%S %p"))) %>% 
+  mutate(date = make_date(year = yr,month = mon,day = day)) %>% 
+  distinct(date, chicago) %>% 
+  mutate(flag = 1) %>% 
+  spread(key = chicago, value = flag, fill = 0) %>% 
+  clean_names() 
+
+chicago_weather <- chicago_clean_day %>% 
+  left_join(chic_desc) %>% 
+  mutate(rain_all = ifelse(thunderstorm == 1 | thunderstorm_with_drizzle == 1 | thunderstorm_with_heavy_rain == 1 |
+                               thunderstorm_with_light_drizzle == 1 | thunderstorm_with_light_rain == 1 | thunderstorm_with_rain == 1 | very_heavy_rain ==1 |
+           heavy_intensity_drizzle == 1 | heavy_intensity_rain == 1 | light_rain == 1 | moderate_rain == 1 |proximity_shower_rain == 1 | 
+             proximity_thunderstorm ==1 |
+           proximity_thunderstorm_with_drizzle == 1 | proximity_thunderstorm_with_rain == 1 | light_intensity_drizzle == 1 |squalls == 1,1,0),
+         snow_all = ifelse(freezing_rain == 1 |light_snow == 1 | light_rain_and_snow == 1 |snow == 1|heavy_snow ==1,1,0)) %>% 
+  select(-mon,-day)
+```
+
+# {.tabset .tabset-fade .tabset-pills}
+## Part I {.tabset .tabset-fade .tabset-pills}
+### Data Cleaning
+```{r, echo=FALSE, warning = F, message = F}
+kable(crimes %>% 
+  select(everything()) %>% 
+summarise_all(funs(sum(is.na(.)))) %>% 
+gather(key = variable,value = missing) %>% 
+  filter(missing != 0), format = "html",col.names = c("Column", "Missing (N)"),align = "c")
+```
+<br>
+* This table tells us what variables in the Crimes table have missing values. Upon further investigation, we will remove the row for the missing ID. The other rows do appear to depict actual crimes and should be considered in further analyses, and are likely mistakes in data entry.<br>
+* Most notably, there are over 100,000 observations without longitude/latitude data available. For any geospatial analyses, these observations need to be removed or imputed based on values from other crimes in the same district or community.<br>
+* For modeling purposes, it is prudent to remove observations with missing values when using the variable as a predictor for violent crime.<br>
+* In addition, there are roughly 1 million observations that appear to be duplicates, so these observations will be removed.<br>
+<br>
+* In the weather data, we primarily care about the weather in Chicago. There are roughly 2000 observations where the value for Chicago is missing for a particular weather category. To consolidate the data, these are removed.
+* For summary statistics below, multiple measurements per day for each weather are considered. For predictive and causal analyses, daily averages are used because there is not a large amount of variance per day.
+
+### Violent Crimes {.tabset .tabset-fade .tabset-pills}
+#### Table 1
+```{r, echo=FALSE, message=FALSE}
+violent_map <- crimes_clean %>% 
+  distinct(primary_type,description) %>% 
+  arrange(primary_type) %>% 
+  mutate(violent = case_when(primary_type %in% c("ROBBERY", "CRIM SEXUAL ASSAULT", "HOMICIDE", "ASSAULT", "BATTERY", "KIDNAPPING", "RITUALISM") ~ 1,
+                              str_detect(pattern = "SEX ABUSE|SEXUAL ABUSE|VIOLENCE|ASSLT|FORC|SEXUAL EXPLOIT", string = description) ~ 1,
+                              TRUE ~ 0))
+
+kable(violent_map %>% filter(violent == 1) %>% 
+        select(-violent),
+      format = "html",col.names = c("Crime Category", "Description"),align = "c") %>% 
+  kable_styling(bootstrap_options = c("striped", "hover")) %>% 
+  scroll_box(height = "4in") 
+
+```
+<br>
+* This table depicts the crimes classified as violent, and will form the basis of subsequent descriptive and predictive analyses.<br>
+* Violent crimes were identified based on the definition from the <a href="https://nij.ojp.gov/topics/crimes/violent-crime">National Institute of Justice.</a><br>
+* Any primary crime category that suggested an individual or group inflicting violence on themselves or others was categorized as violent. This included obvious crimes such as sexual assualt, homicide, robbery, and kidnapping in addition to more nuanced perpetrations of violence such as sexual abuse, forced entry, and ritualism.<br>
+
+#### Table 2
+```{r,echo=FALSE, message=FALSE}
+crimes_clean <- crimes_clean %>% 
+  left_join(violent_map)
+summarise_violent <- crimes_clean %>% 
+  mutate(total = n()) %>% 
+  group_by(primary_type, description,violent, total) %>% 
+  summarise(n = n()) %>% 
+  filter(violent == 1) %>% 
+  mutate(pct = (n/total) * 100) %>% 
+  group_by(primary_type) %>% 
+  mutate(pct_cat = (sum(n)/total)*100,
+         n_cat = sum(n)) %>% 
+  arrange(desc(pct_cat), desc(pct)) %>% 
+  ungroup() %>% 
+  select(primary_type, description,pct, n, pct_cat,n_cat) 
+
+all_violent <- summarise_violent %>% 
+  summarise(pct = sum(pct),
+            n = sum(n)) %>% 
+  mutate(primary_type = "TOTAL VIOLENT CRIME")
+
+category_violent <- summarise_violent %>% 
+  distinct(primary_type, pct_cat,n_cat) %>% 
+  mutate(n = n_cat,
+                pct = pct_cat,
+ description = "TOTAL")
+
+summarise_violent <- summarise_violent %>% 
+  bind_rows(category_violent) %>% 
+  arrange(desc(n_cat),n) %>% 
+  select(-n_cat,-pct_cat) %>% 
+  bind_rows(all_violent) %>% 
+  mutate(pct = paste0(format(round(pct,1),digits = 1,nsmall = 1),"%"))  
+
+
+my_ft <- flextable(
+  summarise_violent)
+my_ft <- merge_v(my_ft,j = "primary_type")
+my_ft <- theme_box(my_ft)
+my_ft <- bold(my_ft, i = ~description == "TOTAL",j = 2:4)
+my_ft <- set_header_labels(my_ft, primary_type = "Crime Category", description = "Description", pct = "Percent of All Crimes", n = "Number")
+my_ft <- bold(my_ft, i=nrow(summarise_violent),j = 1:4)
+my_ft <- align(my_ft, align = "center", part = "all")
+my_ft
+```
+<br>
+* This table summarizes the violent crimes in Chicago. Based on the above description classification, roughly 33% of all crimes are violent, and of these 18% (a little over half) are some form of battery.
+* There is not as clear of a pattern amongst the other types of violent crimes presented in this table.
+
+### Weather Patterns {.tabset .tabset-fade .tabset-pills}
+#### Table
+```{r, echo = FALSE}
+summary_weather <-weather_clean %>% 
+        group_by(type,mon_label) %>% 
+        summarise(avg = mean(chicago),
+                  med = median(chicago),
+                  sd = sd(chicago))
+kable(summary_weather, col.names = c("Weather Stat", "Month", "Mean", "Median", "Std. Dev"), format = "html", digits = 2, align = "c") %>% 
+  kable_styling(bootstrap_options = c("striped", "hover")) %>% 
+  scroll_box(height = "2in")
+```
+<br>
+
+#### Figure
+```{r, echo = FALSE}
+f1 <- plot_ly(data = summary_weather %>% filter(type=="humidity"), x = ~mon_label, y = ~avg, type = "bar") %>% 
+  layout(xaxis = list(title = "Month"), yaxis = list(title = "Average Humidity"))
+f2 <- plot_ly(data = summary_weather %>% filter(type=="pressure"), x = ~mon_label, y = ~avg, type = "bar") %>% 
+  layout(xaxis = list(title = "Month"), yaxis = list(title = "Average Pressure"))
+f3 <- plot_ly(data = summary_weather %>% filter(type=="temperature"), x = ~mon_label, y = ~avg, type = "bar") %>% 
+  layout(xaxis = list(title = "Month"), yaxis = list(title = "Average Temperature"))
+f4 <- plot_ly(data = summary_weather %>% filter(type=="wind_direction"), x = ~mon_label, y = ~avg, type = "bar") %>% 
+  layout(xaxis = list(title = "Month"), yaxis = list(title = "Average Wind Direction"))
+f5 <- plot_ly(data = summary_weather %>% filter(type=="wind_speed"), x = ~mon_label, y = ~avg, type = "bar") %>% 
+  layout(xaxis = list(title = "Month"), yaxis = list(title = "Average Wind Speed"))
+```
+
+```{r, echo = F}
+f1
+```
+<br>
+```{r, echo = F}
+f2
+```
+<br>
+```{r, echo = F}
+f3
+```
+<br>
+```{r, echo = F}
+f4
+```
+<br>
+```{r, echo = F}
+f5
+```
+
+#### Explanation
+* This visualization and table shows us how the different weather statistics vary throughout the year in Chicago. Some characteristics such as temperature, and pressure are relatively stable each month, without drastic variations, but others like wind direction and speed are less predictable.
+* Most of the weather metrics appear to vary throughout the year based on seasonality except for air pressure.
+* It should be noted that units of measurement were not available in the Kaggle data description, so some of these may not be particularly interpretable. For example, temperature shows averages of >250, which is definitely not a F or C estimate.
+
+## Part II {.tabset .tabset-fade .tabset-pills}
+### Logistic Regression
+
+* Core predictors used in this model will be ones that offer additional insight into the nature of the crime that the city can use to drive decision-making.<br>
+* These will assess the effect of different policing departments, the locations within the city, and geographic districts on perpetration of violent crime.<br>
+* In addition, the effect of weather and the time of day will be analyzed. While the city cannot influence the weather or time directly, understanding what drives more violent crime will allow it to more knowledgably allocate resources.<br>
+* Certain predictors have been consolidated and cleaned up to bring out the key patterns (i.e. combining all medical locations, grouping time of day, etc.). Only rows with no missing values in key variables for the model will be used to build the model to facilitate predictions in the third step. A limitation of this is that we lose quite a bit of data.<br>
+
+```{r, echo = FALSE, message = FALSE, warning = F}
+model_inputs <- crimes_clean %>% 
+  select(-latitude,-longitude,-x1,-x_coordinate,-y_coordinate,-updated_on,-location,-type,-iucr,-block,-fbi_code) %>% 
+  left_join(chicago_weather) %>% 
+  group_by(location_description) %>% 
+  mutate(n = n()) %>% 
+  mutate(location_mod = case_when(str_detect(pattern = "AIRPORT", location_description) ~ "AIRPORT",
+                                  str_detect(pattern = "HOSPITAL|MEDICAL|NURSING HOME", location_description) ~ "MEDICAL/NURSING FACILITIES",
+                                  str_detect(pattern = "CHURCH|SPORT|LIBRARY|BARBER", location_description) ~ "PUBLIC PLACES",
+                                  str_detect(pattern = "VEHICLE|TAXI|TRUCK|TRANSPORTATION", location_description) ~ "OTHER",
+                                  str_detect(pattern = "CTA", location_description) ~ "PUBLIC TRANSPORT",
+                                  str_detect(pattern = "^CHA ", location_description) ~ "CHICAGO HOUSING AUTHORITY PROPERTY",
+                                  str_detect(pattern = "RESIDENTIAL|APARTMENT|RESIDENCE|HOUSE|PORCH", location_description) ~ "RESIDENTIAL",
+                                  str_detect(pattern = "JAIL", location_description) ~ "JAIL",
+                                  str_detect(pattern = "LIQUOR|TAVERN|CLUB", location_description) ~ "PLACES WITH ALCOHOL",
+                                  str_detect(pattern = "STORE|SHOP|RESTAURANT", location_description) ~ "STORE/FOOD",
+                                  str_detect(pattern = "SCHOOL|COLLEGE", location_description) ~ "SCHOOL/UNIVERSITY",
+                                 str_detect(pattern = "RIVER|PRAIRIE|WOOD|FOREST|LAGOON|LAKE", location_description) ~ "NATURE",
+                                str_detect(pattern = "POLICE|FEDERAL|GOVERNMENT|FIRE STATION", location_description) ~ "GOVERNMENT PROPERTY",
+                                str_detect(pattern = "SIDEWALK|STREET", location_description) |location_description == "ALLEY" ~ "STREET/ALLEY",
+                                str_detect(pattern = "OFFICE|FACTORY", location_description) ~ "OFFICE/FACTORY",
+                                str_detect(pattern = "LOT|PARK PROPERTY", location_description) ~ "LOT/PARK",
+                                str_detect(pattern = "BANK|CURRENCY|CREDIT|SAVINGS", location_description) ~ "FINANCIAL INSTITUTIONS",
+                                str_detect(pattern = "GAS|CAR WASH", location_description) ~ "GAS STATION/CAR WASH",
+                                str_detect(pattern = "RAILROAD", location_description) ~ "OTHER",
+                                str_detect(pattern = "POOL|CONSTRUCTION|DAY CARE|HIGHWAY|COIN OPERATED|HOTEL", location_description) | location_description == "AUTO" ~ "OTHER",
+                                n > 700 ~ location_description,
+                                !is.na(location_description) ~ "OTHER"),
+         hr_of_day_grp = case_when(hr_of_day %in% c(8:12) ~ "Morning (8AM-12PM)",
+                                   hr_of_day %in% c(13:17) ~ "Afternoon (1-5 PM)",
+                                   hr_of_day %in% c(18:21) ~ "Early Night (6-9 PM)",
+                                   hr_of_day %in% c(22:23, 0:4) ~ "Late Night (10PM - 4 AM)",
+                                   hr_of_day %in% c(5:7) ~ "Early Morning (5-7AM)"))
+
+binary_loc <- varhandle::to.dummy(model_inputs$location_mod,prefix = "loc") %>% 
+  as.tibble()
+model_inputs <- model_inputs %>% 
+  bind_cols(binary_loc) %>% 
+  clean_names() 
+
+model_inputs2 <- model_inputs %>% 
+  select(violent, hr_of_day_grp, starts_with("loc"), snow_all, rain_all,temperature, day, mon, day_of_wk) %>% 
+  na.omit
+
+model_inputs3 <- model_inputs2 %>% 
+  ungroup() %>% 
+  select(violent, day, mon, day_of_wk, hr_of_day_grp, rain_all, temperature)
+```
+
+```{r, echo = FALSE}
+log_reg <- glm(formula = factor(violent) ~ factor(hr_of_day_grp) + factor(loc_residential) + factor(loc_school_university) + factor(loc_public_transport) + factor(loc_street_alley) + factor(loc_airport) + factor(loc_abandoned_building) + factor(loc_atm_automatic_teller_machine) +factor(loc_public_places) + factor(loc_places_with_alcohol) + factor(loc_store_food) +temperature + factor(rain_all) + factor(snow_all) +factor(loc_lot_park) + factor(loc_gas_station_car_wash),family = "binomial",data = model_inputs2)
+summary_tbl <- tidy(log_reg) %>% 
+  mutate(odds = exp(estimate)) %>% 
+  select(term, estimate, odds, everything())
+kable(summary_tbl %>% select(-std.error,-statistic), format = "html", digits = 2,col.names = c("Term", "Log Odds", "Odds", "P-Value"), align = "lccc") %>% 
+  kable_styling(bootstrap_options = c("striped","hover")) %>% 
+  scroll_box(height = "3.5in")
+```
+
+### Interpretation
+* This model considers certain key locations for the crime, the temperature of that day, the time of the day, and whether there was rain or snow that day.<br>
+* Understandably so, the odds of a violent crime increase by 29% and 18% between the hours of 10PM and 4 AM and 5-7 AM respectively as compared to 1 PM to 5 PM. Night time is often considered prime time for crimes, and the data here confirms that violent crimes increase in the night-time and early morning hours. Interestingly, the early parts of the night are slightly less prone (6%) to violent crime than the peak day time afternoon hours even though it is nighttime.<br>
+* Based on the model, public transport, schools and universities, streets and alleys, and residential areas increase the odds of violent crime the most.<br>
+* While there is a slight decrease in the odds of violent crime when there is rain, it is only by 2%. Similarly, the snow and temperature doesn't impact the odds of violent crime, even though the coefficients themselves are significant.<br>
+
+## Part III {.tabset .tabset-fade .tabset-pills}
+### Models
+```{r, echo = FALSE}
+model_inputs3$violent <- as.factor(model_inputs3$violent)
+model_inputs3$day <- as.factor(model_inputs3$day)
+model_inputs3$day_of_wk <- as.factor(model_inputs3$day_of_wk)
+model_inputs3$hr_of_day_grp <- as.factor(model_inputs3$hr_of_day_grp)
+model_inputs3$rain_all <- as.factor(model_inputs3$rain_all)
+model_inputs3$mon <- as.factor(model_inputs3$mon)
+
+n <- sample(1:nrow(model_inputs3),size = .3*nrow(model_inputs3))
+testing <- model_inputs3[n,]
+training <- model_inputs3[-n,]
+```
+
+* The first step to building the model is to split the data into a training data set to help build the model, and a testing data to help test the model.<br>
+* A logistic regression, Naive Bayes, and random forest classifier will be developed using the training data and evaluated for performance in terms of misclassification rate, Type I error, and Type II error.<br>
+
+```{r, echo = FALSE, message = F}
+miss_rate <- function(predicted, actual){
+  val <- sum(actual != predicted, na.rm = T)/length(actual)
+  return(val)
+}
+cm_mat <- function(predicted, actual){
+  val <- confusionMatrix(data = predicted, reference = actual)
+  return(val$table)
+}
+
+log_reg_pred <- glm(formula = violent ~ hr_of_day_grp + day_of_wk + mon +  day + temperature + rain_all,family = "binomial", data = training)
+bayes <- naiveBayes(formula = violent ~ hr_of_day_grp + day_of_wk + mon +  day + temperature + rain_all,data = training)
+rf <- randomForest(y = training$violent, x = training %>% ungroup() %>% select(-violent),ntree = 70)
+```
+
+```{r,warning=F}
+print(paste0("A binomial logistic regression model gives a misclassification rate of ", 
+             round(miss_rate(predicted = round(predict(log_reg_pred,newdata = testing,type = "response")),actual = testing$violent)*100,1), "%."))
+cm_mat(predicted = factor(round(predict(log_reg_pred,newdata = testing,type = "response"))),actual = testing$violent)
+print(paste0("A Naive Bayes model gives a misclassification rate of ", 
+             round(miss_rate(predicted =predict(bayes,newdata = testing,threshold = .001),actual = testing$violent)*100,1), "%."))
+cm_mat(predicted =predict(bayes,newdata = testing,threshold = .001),actual = testing$violent)
+print(paste0("A random forest model with 70 trees gives a misclassification rate of ", 
+             round(miss_rate(predicted = predict(object = rf,newdata = testing), actual = testing$violent)*100,1), "%."))
+cm_mat(predicted = predict(object = rf,newdata = testing), actual = testing$violent)
+```
+
+### Interpration
+* In this case, a false negative is more harmful than a false positive. Predicting that a violent crime will not occur when it actually does is more detrimental from a societal perspective. However, a high false positive rate might lead to resources being inefficiently allocated to certain high risk areas, leading to an economic burden for the city.<br>
+* Based on this assumption, the Naive Bayes model and logistic regression are the best fit in this case because  they have the lowest rate of Type II errors (false negatives).<br>
+* If the mayor is interested in reducing Type I errors for the purpose of optimizing taxpayer funds, he or she should consider implementing the random forest regression because it offers the lowest Type I error (false positive) and misclassification rate.
+* Given more time, I would construct models with fewer dimensions to assess the impact of a simplistic model, and try other algorithms such as SVMs, KNN, and boosting techniques to improve the classification rate. Additionally, with increased computational power, I would build a random forest with more trees (N =500 is the default).
